@@ -2,10 +2,10 @@
 #include <WiFiConnectionHandler.h>
 #include <ArduinoIoTCloud.h>
 #include "thingProperties.h"
-#include <CheapStepper.h> // Include the CheapStepper library for controlling stepper motors
-#include <Servo.h>        // Include the Servo library for controlling servo motors
+#include <CheapStepper.h> // Library for controlling stepper motors
+#include <Servo.h>        // Library for controlling servo motors
 
-// Motor Pins
+// Motor Control Pins
 int leftf1 = 2;
 int leftf2 = 3;
 int rightf1 = 4;
@@ -13,16 +13,16 @@ int rightf2 = 5;
 
 bool motorState;
 
-// Waste Monitoring Pins
-const int IR_SENSOR_RECYCLABLE = 10;       // IR sensor for recyclable bin (digital pin)
-const int IR_SENSOR_NON_RECYCLABLE = A2;  // IR sensor for non-recyclable bin (analog pin)
-const int ANALOG_THRESHOLD = 500;         // Threshold for analog sensor
+// Waste Monitoring Sensor Pins
+const int IR_SENSOR_RECYCLABLE = 10;      // IR sensor for detecting recyclable waste (digital pin)
+const int IR_SENSOR_NON_RECYCLABLE = A2;  // IR sensor for detecting non-recyclable waste (analog pin)
+const int ANALOG_THRESHOLD = 500;         // Threshold for detecting waste using an analog sensor
 
-// Stepper and Servo Setup
-Servo servo1;               // Create a Servo object to control a servo motor
-#define IR_SENSOR 11        // Define pin 11 as the IR sensor input pin
-#define PROXI_SENSOR 12     // Define pin 12 as the proximity sensor input pin
-CheapStepper stepper(9, 8, 7, 6); // Create a CheapStepper object for a 4-wire stepper motor
+// Stepper and Servo Motor Setup
+Servo servo1;               // Servo motor object
+#define IR_SENSOR 11        // IR sensor for waste classification
+#define PROXI_SENSOR 12     // Proximity sensor for detecting waste presence
+CheapStepper stepper(9, 8, 7, 6); // Stepper motor with 4 control wires
 
 void setup() {
   // Initialize serial communication
@@ -35,30 +35,30 @@ void setup() {
   // Connect to Arduino IoT Cloud
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
 
-  // Debug information
+  // Debugging setup
   setDebugMessageLevel(2);
   ArduinoCloud.printDebugInfo();
 
-  // Configure motor pins
+  // Configure motor control pins
   pinMode(leftf1, OUTPUT);
   pinMode(leftf2, OUTPUT);
   pinMode(rightf1, OUTPUT);
   pinMode(rightf2, OUTPUT);
   pinMode(A4, OUTPUT);
   pinMode(A5, OUTPUT);
-  stopMovement(); // Default motors off
+  stopMovement(); // Ensure motors are stopped initially
 
-  // Configure waste sensor pins
+  // Configure waste sensor input pins
   pinMode(IR_SENSOR_RECYCLABLE, INPUT);
   pinMode(IR_SENSOR_NON_RECYCLABLE, INPUT);
-
-  // Configure stepper and servo
   pinMode(PROXI_SENSOR, INPUT);
   pinMode(IR_SENSOR, INPUT);
+
+  // Initialize stepper and servo motor
   servo1.attach(13);
   stepper.setRpm(17);
 
-  // Initialize servo position
+  // Set initial servo position
   servo1.write(70);
   delay(1000);
   servo1.write(180);
@@ -66,16 +66,18 @@ void setup() {
 }
 
 void loop() {
+  // Set motor speed (PWM output)
   analogWrite(A4, 100);
   analogWrite(A5, 100);
 
-  // Update Arduino IoT Cloud
+  // Update IoT Cloud properties
   ArduinoCloud.update();
 
-  // Waste Monitoring Logic
+  // Waste bin monitoring
   int recyclableStatus = digitalRead(IR_SENSOR_RECYCLABLE);
   int nonRecyclableStatus = analogRead(IR_SENSOR_NON_RECYCLABLE);
 
+  // Check and update recyclable bin status
   if (recyclableStatus == HIGH && !isRecyclableFull) {
     isRecyclableFull = true;
     Serial.println("Recyclable bin is full.");
@@ -84,6 +86,7 @@ void loop() {
     Serial.println("Recyclable bin is not full.");
   }
 
+  // Check and update non-recyclable bin status
   if (nonRecyclableStatus > ANALOG_THRESHOLD && !isNonRecyclableFull) {
     isNonRecyclableFull = true;
     Serial.println("Non-recyclable bin is full.");
@@ -92,7 +95,7 @@ void loop() {
     Serial.println("Non-recyclable bin is not full.");
   }
 
-  // Waste Classification Logic
+  // Waste classification logic
   int irState = digitalRead(IR_SENSOR);
   int proxiState = digitalRead(PROXI_SENSOR);
 
@@ -105,35 +108,36 @@ void loop() {
     classifyNonRecyclableWaste();
   }
 
-  delay(500); // Stability delay
+  delay(500); // Small delay for stability
 }
 
-// Waste Classification Functions
+// Classify and sort recyclable waste
 void classifyRecyclableWaste() {
   Serial.println("Recyclable waste detected.");
-  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  stepper.moveDegreesCCW(90); // Rotate stepper counterclockwise by 90°
   delay(1000);
-  servo1.write(70);          // Move servo to 70°
+  servo1.write(70);           // Move servo to 70°
   delay(2000);
-  servo1.write(180);         // Move servo back to 180°
+  servo1.write(180);          // Move servo back to 180°
   delay(1000);
-  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  stepper.moveDegreesCW(90);  // Rotate stepper clockwise by 90°
   delay(1000);
 }
 
+// Classify and sort non-recyclable waste
 void classifyNonRecyclableWaste() {
   Serial.println("Non-recyclable waste detected.");
-  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  stepper.moveDegreesCW(90);  // Rotate stepper clockwise by 90°
   delay(1000);
-  servo1.write(70);          // Move servo to 70°
+  servo1.write(70);           // Move servo to 70°
   delay(2000);
-  servo1.write(180);         // Move servo back to 180°
+  servo1.write(180);          // Move servo back to 180°
   delay(1000);
-  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  stepper.moveDegreesCCW(90); // Rotate stepper counterclockwise by 90°
   delay(1000);
 }
 
-// Motor Control Functions
+// Motor movement functions
 void forward() {
   digitalWrite(leftf1, LOW);
   digitalWrite(leftf2, HIGH);
@@ -176,19 +180,11 @@ void onMotorStateChange() {
 }
 
 void onIsRecyclableFullChange() {
-  if (isRecyclableFull) {
-    Serial.println("Recyclable bin status updated: Full");
-  } else {
-    Serial.println("Recyclable bin status updated: Not Full");
-  }
+  Serial.println(isRecyclableFull ? "Recyclable bin status updated: Full" : "Recyclable bin status updated: Not Full");
 }
 
 void onIsNonRecyclableFullChange() {
-  if (isNonRecyclableFull) {
-    Serial.println("Non-recyclable bin status updated: Full");
-  } else {
-    Serial.println("Non-recyclable bin status updated: Not Full");
-  }
+  Serial.println(isNonRecyclableFull ? "Non-recyclable bin status updated: Full" : "Non-recyclable bin status updated: Not Full");
 }
 
 void onLeftChange() {
