@@ -1,0 +1,59 @@
+#include <CheapStepper.h> // Include the CheapStepper library for controlling stepper motors
+#include <Servo.h>        // Include the Servo library for controlling servo motors
+
+Servo servo1;               // Create a Servo object to control a servo motor
+#define ir 11                // Define pin 11 as the IR sensor input pin
+#define proxi 12             // Define pin 12 as the proximity sensor input pin
+CheapStepper stepper(9, 8, 7, 6); // Create a CheapStepper object for a 4-wire stepper motor
+
+void setup() {
+  Serial.begin(9600);       // Initialize serial communication at 9600 baud rate
+  pinMode(proxi, INPUT);    // Set proximity sensor pin as input with internal pull-up
+  pinMode(ir, INPUT);       // Set IR sensor pin as input
+  servo1.attach(13);         // Attach the servo motor to pin 13
+  stepper.setRpm(17);       // Set the stepper motor speed to 17 RPM
+
+  // Initialize servo position to 70°, then move to 180°
+  servo1.write(70);
+  delay(1000);
+  servo1.write(180);
+  delay(1000);
+}
+
+void loop() {
+  int irState = digitalRead(ir);      // Read the IR sensor state
+  int proxiState = digitalRead(proxi); // Read the proximity sensor state
+
+  Serial.print("Waste Presence: ");
+  Serial.println(proxiState || !irState); // Print the proximity sensor state to the Serial Monitor
+
+  if (proxiState == HIGH) { // If the proximity sensor detects metal (recyclable)
+    classifyRecyclableWaste();
+  } else if (irState == LOW) { // If only the IR sensor detects waste (non-recyclable)
+    classifyNonRecyclableWaste();
+  }
+}
+
+void classifyRecyclableWaste() {
+  Serial.println("Recyclable waste detected.");
+  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  delay(1000);
+  servo1.write(70);          // Move servo to 180°
+  delay(2000);
+  servo1.write(180);           // Move servo back to 70°
+  delay(1000);
+  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  delay(1000);
+}
+
+void classifyNonRecyclableWaste() {
+  Serial.println("Non-recyclable waste detected.");
+  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  delay(1000);
+  servo1.write(70);          // Move servo to 180°
+  delay(2000);
+  servo1.write(180);           // Move servo back to 70°
+  delay(1000);
+  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  delay(1000);
+}

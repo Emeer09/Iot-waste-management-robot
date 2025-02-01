@@ -1,0 +1,216 @@
+#include <Arduino_ConnectionHandler.h>
+#include <WiFiConnectionHandler.h>
+#include <ArduinoIoTCloud.h>
+#include "thingProperties.h"
+#include <CheapStepper.h> // Include the CheapStepper library for controlling stepper motors
+#include <Servo.h>        // Include the Servo library for controlling servo motors
+
+// Motor Pins
+int leftf1 = 2;
+int leftf2 = 3;
+int rightf1 = 4;
+int rightf2 = 5;
+
+bool motorState;
+
+// Waste Monitoring Pins
+const int IR_SENSOR_RECYCLABLE = 10;       // IR sensor for recyclable bin (digital pin)
+const int IR_SENSOR_NON_RECYCLABLE = A2;  // IR sensor for non-recyclable bin (analog pin)
+const int ANALOG_THRESHOLD = 500;         // Threshold for analog sensor
+
+// Stepper and Servo Setup
+Servo servo1;               // Create a Servo object to control a servo motor
+#define IR_SENSOR 11        // Define pin 11 as the IR sensor input pin
+#define PROXI_SENSOR 12     // Define pin 12 as the proximity sensor input pin
+CheapStepper stepper(9, 8, 7, 6); // Create a CheapStepper object for a 4-wire stepper motor
+
+void setup() {
+  // Initialize serial communication
+  Serial.begin(9600);
+  delay(1500);
+
+  // Initialize IoT Cloud properties
+  initProperties();
+
+  // Connect to Arduino IoT Cloud
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection);
+
+  // Debug information
+  setDebugMessageLevel(2);
+  ArduinoCloud.printDebugInfo();
+
+  // Configure motor pins
+  pinMode(leftf1, OUTPUT);
+  pinMode(leftf2, OUTPUT);
+  pinMode(rightf1, OUTPUT);
+  pinMode(rightf2, OUTPUT);
+  pinMode(A4, OUTPUT);
+  pinMode(A5, OUTPUT);
+  stopMovement(); // Default motors off
+
+  // Configure waste sensor pins
+  pinMode(IR_SENSOR_RECYCLABLE, INPUT);
+  pinMode(IR_SENSOR_NON_RECYCLABLE, INPUT);
+
+  // Configure stepper and servo
+  pinMode(PROXI_SENSOR, INPUT);
+  pinMode(IR_SENSOR, INPUT);
+  servo1.attach(13);
+  stepper.setRpm(17);
+
+  // Initialize servo position
+  servo1.write(70);
+  delay(1000);
+  servo1.write(180);
+  delay(1000);
+}
+
+void loop() {
+  analogWrite(A4, 100);
+  analogWrite(A5, 100);
+
+  // Update Arduino IoT Cloud
+  ArduinoCloud.update();
+
+  // Waste Monitoring Logic
+  int recyclableStatus = digitalRead(IR_SENSOR_RECYCLABLE);
+  int nonRecyclableStatus = analogRead(IR_SENSOR_NON_RECYCLABLE);
+
+  if (recyclableStatus == HIGH && !isRecyclableFull) {
+    isRecyclableFull = true;
+    Serial.println("Recyclable bin is full.");
+  } else if (recyclableStatus == LOW && isRecyclableFull) {
+    isRecyclableFull = false;
+    Serial.println("Recyclable bin is not full.");
+  }
+
+  if (nonRecyclableStatus > ANALOG_THRESHOLD && !isNonRecyclableFull) {
+    isNonRecyclableFull = true;
+    Serial.println("Non-recyclable bin is full.");
+  } else if (nonRecyclableStatus <= ANALOG_THRESHOLD && isNonRecyclableFull) {
+    isNonRecyclableFull = false;
+    Serial.println("Non-recyclable bin is not full.");
+  }
+
+  // Waste Classification Logic
+  int irState = digitalRead(IR_SENSOR);
+  int proxiState = digitalRead(PROXI_SENSOR);
+
+  Serial.print("Waste Presence: ");
+  Serial.println(proxiState || !irState);
+
+  if (proxiState == HIGH) {
+    classifyRecyclableWaste();
+  } else if (irState == LOW) {
+    classifyNonRecyclableWaste();
+  }
+
+  delay(500); // Stability delay
+}
+
+// Waste Classification Functions
+void classifyRecyclableWaste() {
+  Serial.println("Recyclable waste detected.");
+  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  delay(1000);
+  servo1.write(70);          // Move servo to 70°
+  delay(2000);
+  servo1.write(180);         // Move servo back to 180°
+  delay(1000);
+  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  delay(1000);
+}
+
+void classifyNonRecyclableWaste() {
+  Serial.println("Non-recyclable waste detected.");
+  stepper.moveDegreesCW(90);  // Rotate the stepper motor clockwise by 90°
+  delay(1000);
+  servo1.write(70);          // Move servo to 70°
+  delay(2000);
+  servo1.write(180);         // Move servo back to 180°
+  delay(1000);
+  stepper.moveDegreesCCW(90); // Rotate the stepper motor counterclockwise by 90°
+  delay(1000);
+}
+
+// Motor Control Functions
+void forward() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, HIGH);
+  digitalWrite(rightf1, HIGH);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Moving Forward");
+}
+
+void moveLeft() {
+  digitalWrite(leftf1, HIGH);
+  digitalWrite(leftf2, LOW);
+  digitalWrite(rightf1, HIGH);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Turning Left");
+}
+
+void moveRight() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, HIGH);
+  digitalWrite(rightf1, LOW);
+  digitalWrite(rightf2, HIGH);
+  Serial.println("Turning Right");
+}
+
+void stopMovement() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, LOW);
+  digitalWrite(rightf1, LOW);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Motors Stopped");
+}
+
+// IoT Property Handlers
+void onMotorStateChange() {
+  if (motorState) {
+    forward();
+  } else {
+    stopMovement();
+  }
+}
+
+void onIsRecyclableFullChange() {
+  if (isRecyclableFull) {
+    Serial.println("Recyclable bin status updated: Full");
+  } else {
+    Serial.println("Recyclable bin status updated: Not Full");
+  }
+}
+
+void onIsNonRecyclableFullChange() {
+  if (isNonRecyclableFull) {
+    Serial.println("Non-recyclable bin status updated: Full");
+  } else {
+    Serial.println("Non-recyclable bin status updated: Not Full");
+  }
+}
+
+void onLeftChange() {
+  if (Left) {
+    moveLeft();
+  } else {
+    stopMovement();
+  }
+}
+
+void onRightChange() {
+  if (Right) {
+    moveRight();
+  } else {
+    stopMovement();
+  }
+}
+
+void onForwardChange() {
+  if (Forward) {
+    forward();
+  } else {
+    stopMovement();
+  }
+}

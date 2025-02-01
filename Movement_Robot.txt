@@ -1,0 +1,108 @@
+#include "thingProperties.h"
+
+int leftf1 = 2;
+int leftf2 = 3;
+int rightf1 = 4;
+int rightf2 = 5;
+
+void setup() {
+  Serial.begin(9600);
+  delay(1500);
+
+  initProperties();
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection);
+
+  setDebugMessageLevel(2);
+  ArduinoCloud.printDebugInfo();
+
+  pinMode(leftf1, OUTPUT);
+  pinMode(leftf2, OUTPUT);
+  pinMode(rightf1, OUTPUT);
+  pinMode(rightf2, OUTPUT);
+  pinMode(A4, OUTPUT);
+  pinMode(A5, OUTPUT);
+
+
+  stopMovement(); // Default motors off
+}
+
+void loop() {
+  ArduinoCloud.update();
+}
+
+// Motor control functions
+void forward() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, HIGH);
+  digitalWrite(rightf1, HIGH);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Moving Forward");
+}
+
+void moveLeft() {
+  digitalWrite(leftf1, HIGH);
+  digitalWrite(leftf2, LOW);
+  digitalWrite(rightf1, HIGH);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Turning Left");
+}
+
+void moveRight() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, HIGH);
+  digitalWrite(rightf1, LOW);
+  digitalWrite(rightf2, HIGH);
+  Serial.println("Turning Right");
+}
+
+void stopMovement() {
+  digitalWrite(leftf1, LOW);
+  digitalWrite(leftf2, LOW);
+  digitalWrite(rightf1, LOW);
+  digitalWrite(rightf2, LOW);
+  Serial.println("Motors Stopped");
+}
+
+// IoT property handler for motorState
+void onMotorStateChange() {
+  if (motorState) {
+    forward();
+  } else {
+    stopMovement();
+  }
+}
+
+
+
+/*
+  Since IsLeft is READ_WRITE variable, onIsLeftChange() is
+  executed every time a new value is received from IoT Cloud.
+*/
+void onIsLeftChange()  {
+  // Add your code here to act upon IsLeft change
+  if (isLeft) {
+    moveLeft();
+  } else {
+    stopMovement();
+  }
+}
+
+/*
+  Since IsRight is READ_WRITE variable, onIsRightChange() is
+  executed every time a new value is received from IoT Cloud.
+*/
+void onIsRightChange()  {
+  // Add your code here to act upon IsRight change
+  if (isRight) {
+    moveRight();
+  } else {
+    stopMovement();
+  }
+}
+void onForwardChange() {
+  if (Forward) {
+    forward();
+  } else {
+    stopMovement();
+  }
+}
